@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { getBookingById } from '@/data/bookings';
+import { isValidUUID } from '@/utils/validation';
 
 /**
  * GET - Get a single booking by ID
@@ -19,6 +20,14 @@ export async function GET(
     if (errorResponse) return errorResponse;
 
     const { id } = await params;
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID lịch hẹn không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const booking = await getBookingById(id);
 
     if (!booking) {

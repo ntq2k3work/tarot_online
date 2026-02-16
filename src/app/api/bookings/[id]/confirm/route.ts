@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { getBookingById, updateBookingStatus } from '@/data/bookings';
 import { notifyUserBookingConfirmed } from '@/utils/notification';
+import { isValidUUID } from '@/utils/validation';
 
 export async function PATCH(
   request: NextRequest,
@@ -17,6 +18,14 @@ export async function PATCH(
     if (errorResponse) return errorResponse;
 
     const { id } = await params;
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID lịch hẹn không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const booking = await getBookingById(id);
 
     if (!booking) {
@@ -26,8 +35,9 @@ export async function PATCH(
       );
     }
 
-    // Only the assigned reader can confirm
-    if (booking.readerId !== context!.user.id) {
+    // Only the assigned reader or admin can confirm
+    const user = context!.user;
+    if (user.role !== 'admin' && booking.readerId !== user.id) {
       return NextResponse.json(
         { error: 'Chỉ reader được chỉ định mới có thể xác nhận lịch hẹn này.' },
         { status: 403 }

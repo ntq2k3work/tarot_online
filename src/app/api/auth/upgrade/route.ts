@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { updateUserRole, createUpgradeRecord, getUpgradeRecordsByUser } from '@/data/users';
 import { generateToken } from '@/utils/auth';
+import { UserPublic } from '@/types/auth';
 
 // Upgrade cost in VND
 const UPGRADE_COST_VND = 50000;
@@ -75,9 +76,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         email: updatedUser.email,
         username: updatedUser.username,
         role: updatedUser.role,
+        phone: updatedUser.phone,
         createdAt: updatedUser.createdAt,
         updatedAt: updatedUser.updatedAt,
-      },
+      } as UserPublic,
     });
   } catch (error) {
     console.error('Upgrade error:', error);

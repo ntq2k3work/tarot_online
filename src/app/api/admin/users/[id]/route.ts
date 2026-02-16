@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest, authorizeRole } from '@/utils/auth-middleware';
 import { findUserById, updateUserRole, deleteUser } from '@/data/users';
 import { UserPublic, UserRole } from '@/types/auth';
+import { isValidUUID, safeParseJSON } from '@/utils/validation';
 
 // Valid roles for role update
 const VALID_ROLES: UserRole[] = ['user', 'render', 'admin'];
@@ -28,6 +29,14 @@ export async function GET(
     if (authzError) return authzError;
 
     const { id } = await params;
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID người dùng không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const user = await findUserById(id);
     if (!user) {
       return NextResponse.json(
@@ -71,7 +80,22 @@ export async function PATCH(
     if (authzError) return authzError;
 
     const { id } = await params;
-    const body = await request.json();
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID người dùng không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
+    const body = await safeParseJSON(request);
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Request body không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const { role } = body as { role: UserRole };
 
     // Validate role
@@ -136,6 +160,13 @@ export async function DELETE(
     if (authzError) return authzError;
 
     const { id } = await params;
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID người dùng không hợp lệ.' },
+        { status: 400 }
+      );
+    }
 
     // Prevent admin from deleting themselves
     if (id === context!.user.id) {

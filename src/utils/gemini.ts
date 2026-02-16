@@ -1,8 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { DrawnCard } from '@/types';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
 const TAROT_SYSTEM_PROMPT = `Bạn là một chuyên gia Tarot có kiến thức sâu về 78 lá bài Tarot và ý nghĩa của chúng. 
 Bạn có khả năng phân tích các lá bài Tarot và đưa ra lời giải thích chi tiết, có ý nghĩa và sâu sắc cho người hỏi.
 
@@ -14,10 +12,23 @@ Khi phân tích, hãy:
 
 Trả lời bằng tiếng Việt, ngôn ngữ tự nhiên và dễ hiểu.`;
 
+/**
+ * Get the Gemini generative AI instance.
+ * Throws if GEMINI_API_KEY is not configured.
+ */
+function getGenAI(): GoogleGenerativeAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not configured. Please add it to .env.local');
+  }
+  return new GoogleGenerativeAI(apiKey);
+}
+
 export async function interpretTarotWithGemini(
   question: string,
   drawnCards: DrawnCard[]
 ): Promise<string> {
+  const genAI = getGenAI();
   const model = genAI.getGenerativeModel({ 
     model: 'gemini-2.5-flash',
     systemInstruction: TAROT_SYSTEM_PROMPT

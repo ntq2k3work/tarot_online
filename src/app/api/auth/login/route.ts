@@ -7,10 +7,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { comparePassword, generateToken } from '@/utils/auth';
 import { findUserByEmail } from '@/data/users';
 import { LoginRequest, AuthResponse, UserPublic } from '@/types/auth';
+import { safeParseJSON } from '@/utils/validation';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await request.json();
+    const body = await safeParseJSON(request);
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Request body không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const { email, password } = body as LoginRequest;
 
     // Validate required fields
@@ -21,8 +29,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Find user by email
-    const user = await findUserByEmail(email);
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return NextResponse.json(
+        { error: 'Email và mật khẩu phải là chuỗi ký tự.' },
+        { status: 400 }
+      );
+    }
+
+    // Find user by email (normalize to lowercase)
+    const user = await findUserByEmail(email.trim().toLowerCase());
     if (!user) {
       return NextResponse.json(
         { error: 'Email hoặc mật khẩu không đúng.' },

@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { interpretTarotWithGemini } from '@/utils/gemini';
 import { DrawnCard } from '@/types';
+import { safeParseJSON } from '@/utils/validation';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await safeParseJSON(request);
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Request body không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const { question, drawnCards } = body as {
       question: string;
       drawnCards: DrawnCard[];
@@ -24,7 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const interpretation = await interpretTarotWithGemini(question, drawnCards);
+    const interpretation = await interpretTarotWithGemini(question || '', drawnCards);
 
     return NextResponse.json({ interpretation });
   } catch (error) {
