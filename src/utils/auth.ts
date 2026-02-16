@@ -1,17 +1,16 @@
 /**
  * Authentication utility functions
- * Handles JWT token generation/verification and password hashing
+ * Handles token generation/verification and password hashing
+ * Uses simple random token-based auth stored in PostgreSQL (no JWT)
  */
 
-import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { TokenPayload, UserRole } from '@/types/auth';
+import { UserRole } from '@/types/auth';
+import { query } from '@/utils/db';
 
-// JWT secret key - in production, use a strong secret from environment variables
-const JWT_SECRET = process.env.JWT_SECRET || 'tarot-online-jwt-secret-key-change-in-production';
-
-// JWT token expiration time (24 hours)
-const TOKEN_EXPIRY = '24h';
+// Token expiration time in hours
+const TOKEN_EXPIRY_HOURS = 24;
 
 // Salt rounds for bcrypt password hashing
 const SALT_ROUNDS = 10;
@@ -31,23 +30,61 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 /**
- * Generate a JWT token for an authenticated user
+ * Generate a random authentication token and store it in the database
  */
-export function generateToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+export async function generateToken(userId: string): Promise<string> {
+  const token = crypto.randomBytes(48).toString('hex');
+  const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
+
+  await query(
+    'UPDATE users SET token = $1, token_expires_at = $2, updated_at = NOW() WHERE id = $3',
+    [token, expiresAt.toISOString(), userId]
+  );
+
+  return token;
 }
 
 /**
- * Verify and decode a JWT token
- * Returns the decoded payload or null if invalid
+ * Verify a token by checking it against the database
+ * Returns the user ID if valid, null otherwise
  */
-export function verifyToken(token: string): TokenPayload | null {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
-    return decoded;
-  } catch {
+export async function verifyToken(
+  token: string
+): Promise<{ userId: string; email: string; role: UserRole } | null> {
+  const result = await query<{
+    id: string;
+    email: string;
+    role: UserRole;
+    token_expires_at: string;
+  }>(
+    'SELECT id, email, role, token_expires_at FROM users WHERE token = $1',
+    [token]
+  );
+
+  if (result.rows.length === 0) {
     return null;
   }
+
+  const user = result.rows[0];
+
+  // Check if token has expired
+  if (new Date(user.token_expires_at) < new Date()) {
+    // Clear expired token
+    await query('UPDATE users SET token = NULL, token_expires_at = NULL WHERE id = $1', [user.id]);
+    return null;
+  }
+
+  return { userId: user.id, email: user.email, role: user.role };
+}
+
+/**
+ * Invalidate a user's token (logout)
+ */
+export async function invalidateToken(userId: string): Promise<void> {
+  await query(
+    'UPDATE users SET token = NULL, token_expires_at = NULL, updated_at = NOW() WHERE id = $1',
+    [userId]
+  );
 }
 
 /**

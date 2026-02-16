@@ -60,12 +60,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const passwordHash = await hashPassword(password);
     const user = await createUser(email, username, passwordHash);
 
-    // Generate JWT token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    // Generate random token and store in database
+    const token = await generateToken(user.id);
 
     // Return user data (without password hash) and token
     const userPublic: UserPublic = {

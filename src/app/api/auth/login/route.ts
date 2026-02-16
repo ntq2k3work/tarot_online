@@ -1,6 +1,6 @@
 /**
  * POST /api/auth/login
- * Authenticate a user with email and password, return JWT token
+ * Authenticate a user with email and password, return auth token
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -39,12 +39,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    // Generate JWT token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    // Generate random token and store in database
+    const token = await generateToken(user.id);
 
     // Return user data (without password hash) and token
     const userPublic: UserPublic = {
