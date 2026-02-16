@@ -1,0 +1,83 @@
+// Prisma schema for Tarot Online
+// PostgreSQL database with User, Session, ReadingHistory, and UpgradeRecord models
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  user
+  render
+  admin
+}
+
+enum UpgradeStatus {
+  pending
+  completed
+  failed
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(user)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  sessions       Session[]
+  readings       ReadingHistory[]
+  upgradeRecords UpgradeRecord[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+model ReadingHistory {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  spreadType     String   @map("spread_type")
+  question       String?
+  cards          Json     // Array of DrawnCard objects
+  interpretation String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("reading_history")
+}
+
+model UpgradeRecord {
+  id        String        @id @default(uuid())
+  userId    String        @map("user_id")
+  fromRole  UserRole      @map("from_role")
+  toRole    UserRole      @map("to_role")
+  amountVND Int           @map("amount_vnd")
+  status    UpgradeStatus @default(pending)
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("upgrade_records")
+}

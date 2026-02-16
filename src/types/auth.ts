@@ -26,7 +26,7 @@ export interface UserPublic {
   updatedAt: string;
 }
 
-// JWT token payload
+// Token payload (returned from token verification)
 export interface TokenPayload {
   userId: string;
   email: string;

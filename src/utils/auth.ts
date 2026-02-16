@@ -1,17 +1,15 @@
 /**
  * Authentication utility functions
- * Handles JWT token generation/verification and password hashing
+ * Handles simple token generation/verification and password hashing
  */
 
-import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { TokenPayload, UserRole } from '@/types/auth';
+import { v4 as uuidv4 } from 'uuid';
+import prisma from '@/lib/prisma';
+import { UserRole } from '@/types/auth';
 
-// JWT secret key - in production, use a strong secret from environment variables
-const JWT_SECRET = process.env.JWT_SECRET || 'tarot-online-jwt-secret-key-change-in-production';
-
-// JWT token expiration time (24 hours)
-const TOKEN_EXPIRY = '24h';
+// Token validity duration (24 hours in milliseconds)
+const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 // Salt rounds for bcrypt password hashing
 const SALT_ROUNDS = 10;
@@ -31,23 +29,64 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 /**
- * Generate a JWT token for an authenticated user
+ * Generate a simple random token and store it in the database
+ * Returns the token string
  */
-export function generateToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+export async function generateToken(userId: string): Promise<string> {
+  const token = uuidv4();
+  const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MS);
+
+  await prisma.session.create({
+    data: {
+      token,
+      userId,
+      expiresAt,
+    },
+  });
+
+  return token;
 }
 
 /**
- * Verify and decode a JWT token
- * Returns the decoded payload or null if invalid
+ * Verify a token by checking it against the database
+ * Returns the user ID and role if valid, null otherwise
  */
-export function verifyToken(token: string): TokenPayload | null {
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
-    return decoded;
-  } catch {
+export async function verifyToken(token: string): Promise<{ userId: string; email: string; role: UserRole } | null> {
+  const session = await prisma.session.findUnique({
+    where: { token },
+    include: { user: true },
+  });
+
+  if (!session) {
     return null;
   }
+
+  // Check if token has expired
+  if (session.expiresAt < new Date()) {
+    // Clean up expired token
+    await prisma.session.delete({ where: { id: session.id } });
+    return null;
+  }
+
+  return {
+    userId: session.user.id,
+    email: session.user.email,
+    role: session.user.role as UserRole,
+  };
+}
+
+/**
+ * Revoke a token (logout)
+ */
+export async function revokeToken(token: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { token } });
+}
+
+/**
+ * Revoke all tokens for a user
+ */
+export async function revokeAllUserTokens(userId: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { userId } });
 }
 
 /**

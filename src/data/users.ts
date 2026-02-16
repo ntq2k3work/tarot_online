@@ -1,57 +1,81 @@
 /**
- * In-memory user store
- * In production, this would be replaced with a database (e.g., PostgreSQL, MongoDB)
+ * User data access layer using PostgreSQL via Prisma
  */
 
-import { User, UpgradeRecord } from '@/types/auth';
+import prisma from '@/lib/prisma';
+import { User, UpgradeRecord, UserRole } from '@/types/auth';
 import { hashPassword } from '@/utils/auth';
-
-// In-memory storage for users
-const users: Map<string, User> = new Map();
-
-// In-memory storage for upgrade/payment records
-const upgradeRecords: Map<string, UpgradeRecord> = new Map();
-
-// Counter for generating unique IDs
-let userIdCounter = 0;
-let upgradeIdCounter = 0;
+import { UserRole as PrismaUserRole, UpgradeStatus } from '@/generated/prisma';
 
 /**
- * Generate a unique user ID
+ * Convert Prisma user to app User type
  */
-function generateUserId(): string {
-  userIdCounter++;
-  return `user_${userIdCounter}_${Date.now()}`;
+function toUser(prismaUser: {
+  id: string;
+  email: string;
+  username: string;
+  passwordHash: string;
+  role: PrismaUserRole;
+  createdAt: Date;
+  updatedAt: Date;
+}): User {
+  return {
+    id: prismaUser.id,
+    email: prismaUser.email,
+    username: prismaUser.username,
+    passwordHash: prismaUser.passwordHash,
+    role: prismaUser.role as UserRole,
+    createdAt: prismaUser.createdAt.toISOString(),
+    updatedAt: prismaUser.updatedAt.toISOString(),
+  };
 }
 
 /**
- * Generate a unique upgrade record ID
+ * Convert Prisma upgrade record to app UpgradeRecord type
  */
-function generateUpgradeId(): string {
-  upgradeIdCounter++;
-  return `upgrade_${upgradeIdCounter}_${Date.now()}`;
+function toUpgradeRecord(record: {
+  id: string;
+  userId: string;
+  fromRole: PrismaUserRole;
+  toRole: PrismaUserRole;
+  amountVND: number;
+  status: UpgradeStatus;
+  createdAt: Date;
+}): UpgradeRecord {
+  return {
+    id: record.id,
+    userId: record.userId,
+    fromRole: record.fromRole as UserRole,
+    toRole: record.toRole as UserRole,
+    amountVND: record.amountVND,
+    status: record.status as UpgradeRecord['status'],
+    createdAt: record.createdAt.toISOString(),
+  };
 }
 
 /**
- * Initialize default admin user (called on first access)
+ * Ensure default admin user exists (called on first access)
  */
 let initialized = false;
 async function ensureInitialized(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
-  // Create a default admin user
-  const adminPasswordHash = await hashPassword('admin123');
-  const adminUser: User = {
-    id: 'admin_default',
-    email: 'admin@tarot-online.vn',
-    username: 'admin',
-    passwordHash: adminPasswordHash,
-    role: 'admin',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  users.set(adminUser.id, adminUser);
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: 'admin@tarot-online.vn' },
+  });
+
+  if (!existingAdmin) {
+    const adminPasswordHash = await hashPassword('admin123');
+    await prisma.user.create({
+      data: {
+        email: 'admin@tarot-online.vn',
+        username: 'admin',
+        passwordHash: adminPasswordHash,
+        role: 'admin',
+      },
+    });
+  }
 }
 
 // --- User CRUD operations ---
@@ -61,10 +85,8 @@ async function ensureInitialized(): Promise<void> {
  */
 export async function findUserByEmail(email: string): Promise<User | null> {
   await ensureInitialized();
-  for (const user of users.values()) {
-    if (user.email === email) return user;
-  }
-  return null;
+  const user = await prisma.user.findUnique({ where: { email } });
+  return user ? toUser(user) : null;
 }
 
 /**
@@ -72,7 +94,8 @@ export async function findUserByEmail(email: string): Promise<User | null> {
  */
 export async function findUserById(id: string): Promise<User | null> {
   await ensureInitialized();
-  return users.get(id) || null;
+  const user = await prisma.user.findUnique({ where: { id } });
+  return user ? toUser(user) : null;
 }
 
 /**
@@ -84,19 +107,15 @@ export async function createUser(
   passwordHash: string
 ): Promise<User> {
   await ensureInitialized();
-  const id = generateUserId();
-  const now = new Date().toISOString();
-  const user: User = {
-    id,
-    email,
-    username,
-    passwordHash,
-    role: 'user', // Default role
-    createdAt: now,
-    updatedAt: now,
-  };
-  users.set(id, user);
-  return user;
+  const user = await prisma.user.create({
+    data: {
+      email,
+      username,
+      passwordHash,
+      role: 'user',
+    },
+  });
+  return toUser(user);
 }
 
 /**
@@ -104,15 +123,18 @@ export async function createUser(
  */
 export async function updateUserRole(
   userId: string,
-  role: User['role']
+  role: UserRole
 ): Promise<User | null> {
   await ensureInitialized();
-  const user = users.get(userId);
-  if (!user) return null;
-  user.role = role;
-  user.updatedAt = new Date().toISOString();
-  users.set(userId, user);
-  return user;
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { role: role as PrismaUserRole },
+    });
+    return toUser(user);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -120,7 +142,8 @@ export async function updateUserRole(
  */
 export async function getAllUsers(): Promise<User[]> {
   await ensureInitialized();
-  return Array.from(users.values());
+  const users = await prisma.user.findMany({ orderBy: { createdAt: 'desc' } });
+  return users.map(toUser);
 }
 
 /**
@@ -128,7 +151,12 @@ export async function getAllUsers(): Promise<User[]> {
  */
 export async function deleteUser(userId: string): Promise<boolean> {
   await ensureInitialized();
-  return users.delete(userId);
+  try {
+    await prisma.user.delete({ where: { id: userId } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // --- Upgrade record operations ---
@@ -138,31 +166,29 @@ export async function deleteUser(userId: string): Promise<boolean> {
  */
 export async function createUpgradeRecord(
   userId: string,
-  fromRole: User['role'],
-  toRole: User['role'],
+  fromRole: UserRole,
+  toRole: UserRole,
   amountVND: number
 ): Promise<UpgradeRecord> {
-  const id = generateUpgradeId();
-  const record: UpgradeRecord = {
-    id,
-    userId,
-    fromRole,
-    toRole,
-    amountVND,
-    status: 'completed', // Simulated payment - auto-complete
-    createdAt: new Date().toISOString(),
-  };
-  upgradeRecords.set(id, record);
-  return record;
+  const record = await prisma.upgradeRecord.create({
+    data: {
+      userId,
+      fromRole: fromRole as PrismaUserRole,
+      toRole: toRole as PrismaUserRole,
+      amountVND,
+      status: 'completed',
+    },
+  });
+  return toUpgradeRecord(record);
 }
 
 /**
  * Get upgrade records for a user
  */
 export async function getUpgradeRecordsByUser(userId: string): Promise<UpgradeRecord[]> {
-  const records: UpgradeRecord[] = [];
-  for (const record of upgradeRecords.values()) {
-    if (record.userId === userId) records.push(record);
-  }
-  return records;
+  const records = await prisma.upgradeRecord.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+  });
+  return records.map(toUpgradeRecord);
 }

@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { updateUserRole, createUpgradeRecord, getUpgradeRecordsByUser } from '@/data/users';
-import { generateToken } from '@/utils/auth';
+import { generateToken, revokeAllUserTokens } from '@/utils/auth';
 
 // Upgrade cost in VND
 const UPGRADE_COST_VND = 50000;
@@ -37,7 +37,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Simulate payment processing
-    // In production, this would integrate with a payment gateway (VNPay, MoMo, etc.)
     const paymentSimulation = {
       method: 'simulated',
       amount: UPGRADE_COST_VND,
@@ -62,12 +61,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       UPGRADE_COST_VND
     );
 
-    // Generate a new token with updated role
-    const newToken = generateToken({
-      userId: updatedUser.id,
-      email: updatedUser.email,
-      role: updatedUser.role,
-    });
+    // Revoke old tokens and generate a new token with updated role
+    await revokeAllUserTokens(user.id);
+    const newToken = await generateToken(updatedUser.id);
 
     return NextResponse.json({
       message: 'Nâng cấp thành công! Bạn đã trở thành "render".',
