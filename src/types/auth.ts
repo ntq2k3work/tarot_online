@@ -12,6 +12,8 @@ export interface User {
   username: string;
   passwordHash: string;
   role: UserRole;
+  token: string | null;
+  tokenExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,13 +26,6 @@ export interface UserPublic {
   role: UserRole;
   createdAt: string;
   updatedAt: string;
-}
-
-// JWT token payload
-export interface TokenPayload {
-  userId: string;
-  email: string;
-  role: UserRole;
 }
 
 // Registration request body
@@ -60,5 +55,14 @@ export interface UpgradeRecord {
   toRole: UserRole;
   amountVND: number;
   status: 'pending' | 'completed' | 'failed';
+  createdAt: string;
+}
+
+// User history record (tarot reading history)
+export interface UserHistory {
+  id: string;
+  userId: string;
+  readingType: string;
+  readingData: Record<string, unknown>;
   createdAt: string;
 }

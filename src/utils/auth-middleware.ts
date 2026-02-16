@@ -6,12 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractBearerToken, verifyToken, hasMinimumRole } from '@/utils/auth';
 import { findUserById } from '@/data/users';
-import { TokenPayload, UserRole, UserPublic } from '@/types/auth';
+import { UserRole, UserPublic } from '@/types/auth';
 
 // Authenticated request context
 export interface AuthContext {
   user: UserPublic;
-  tokenPayload: TokenPayload;
 }
 
 /**
@@ -34,8 +33,8 @@ export async function authenticateRequest(
     };
   }
 
-  const payload = verifyToken(token);
-  if (!payload) {
+  const tokenData = await verifyToken(token);
+  if (!tokenData) {
     return {
       context: null,
       errorResponse: NextResponse.json(
@@ -45,8 +44,8 @@ export async function authenticateRequest(
     };
   }
 
-  // Verify user still exists
-  const user = await findUserById(payload.userId);
+  // Verify user still exists and get full data
+  const user = await findUserById(tokenData.userId);
   if (!user) {
     return {
       context: null,
@@ -67,7 +66,7 @@ export async function authenticateRequest(
   };
 
   return {
-    context: { user: userPublic, tokenPayload: payload },
+    context: { user: userPublic },
     errorResponse: null,
   };
 }

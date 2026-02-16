@@ -62,12 +62,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       UPGRADE_COST_VND
     );
 
-    // Generate a new token with updated role
-    const newToken = generateToken({
-      userId: updatedUser.id,
-      email: updatedUser.email,
-      role: updatedUser.role,
-    });
+    // Generate a new token (old token is invalidated when new one is set)
+    const newToken = await generateToken(updatedUser.id);
 
     return NextResponse.json({
       message: 'Nâng cấp thành công! Bạn đã trở thành "render".',

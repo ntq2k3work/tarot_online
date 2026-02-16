@@ -1,57 +1,112 @@
 /**
- * In-memory user store
- * In production, this would be replaced with a database (e.g., PostgreSQL, MongoDB)
+ * User data access layer
+ * Uses PostgreSQL database for persistent storage
  */
 
-import { User, UpgradeRecord } from '@/types/auth';
+import { User, UpgradeRecord, UserHistory } from '@/types/auth';
+import { query, runMigrations } from '@/utils/db';
 import { hashPassword } from '@/utils/auth';
 
-// In-memory storage for users
-const users: Map<string, User> = new Map();
+// Database row types (snake_case from PostgreSQL)
+interface UserRow {
+  id: string;
+  username: string;
+  email: string;
+  password_hash: string;
+  role: 'user' | 'render' | 'admin';
+  token: string | null;
+  token_expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
-// In-memory storage for upgrade/payment records
-const upgradeRecords: Map<string, UpgradeRecord> = new Map();
+interface UpgradeRow {
+  id: string;
+  user_id: string;
+  from_role: string;
+  to_role: string;
+  amount_vnd: number;
+  status: 'pending' | 'completed' | 'failed';
+  created_at: string;
+}
 
-// Counter for generating unique IDs
-let userIdCounter = 0;
-let upgradeIdCounter = 0;
-
-/**
- * Generate a unique user ID
- */
-function generateUserId(): string {
-  userIdCounter++;
-  return `user_${userIdCounter}_${Date.now()}`;
+interface HistoryRow {
+  id: string;
+  user_id: string;
+  reading_type: string;
+  reading_data: Record<string, unknown>;
+  created_at: string;
 }
 
 /**
- * Generate a unique upgrade record ID
+ * Convert a database row to a User object
  */
-function generateUpgradeId(): string {
-  upgradeIdCounter++;
-  return `upgrade_${upgradeIdCounter}_${Date.now()}`;
+function rowToUser(row: UserRow): User {
+  return {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    passwordHash: row.password_hash,
+    role: row.role,
+    token: row.token,
+    tokenExpiresAt: row.token_expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 /**
- * Initialize default admin user (called on first access)
+ * Convert a database row to an UpgradeRecord object
+ */
+function rowToUpgradeRecord(row: UpgradeRow): UpgradeRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    fromRole: row.from_role as UpgradeRecord['fromRole'],
+    toRole: row.to_role as UpgradeRecord['toRole'],
+    amountVND: row.amount_vnd,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Convert a database row to a UserHistory object
+ */
+function rowToHistory(row: HistoryRow): UserHistory {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    readingType: row.reading_type,
+    readingData: row.reading_data,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Ensure database is initialized with migrations and default admin user
  */
 let initialized = false;
 async function ensureInitialized(): Promise<void> {
   if (initialized) return;
   initialized = true;
 
-  // Create a default admin user
-  const adminPasswordHash = await hashPassword('admin123');
-  const adminUser: User = {
-    id: 'admin_default',
-    email: 'admin@tarot-online.vn',
-    username: 'admin',
-    passwordHash: adminPasswordHash,
-    role: 'admin',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  users.set(adminUser.id, adminUser);
+  await runMigrations();
+
+  // Create default admin user if not exists
+  const existing = await query<UserRow>(
+    'SELECT id FROM users WHERE email = $1',
+    ['admin@tarot-online.vn']
+  );
+
+  if (existing.rows.length === 0) {
+    const adminPasswordHash = await hashPassword('admin123');
+    await query(
+      `INSERT INTO users (username, email, password_hash, role)
+       VALUES ($1, $2, $3, $4)`,
+      ['admin', 'admin@tarot-online.vn', adminPasswordHash, 'admin']
+    );
+  }
 }
 
 // --- User CRUD operations ---
@@ -61,10 +116,11 @@ async function ensureInitialized(): Promise<void> {
  */
 export async function findUserByEmail(email: string): Promise<User | null> {
   await ensureInitialized();
-  for (const user of users.values()) {
-    if (user.email === email) return user;
-  }
-  return null;
+  const result = await query<UserRow>(
+    'SELECT * FROM users WHERE email = $1',
+    [email]
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
 /**
@@ -72,7 +128,11 @@ export async function findUserByEmail(email: string): Promise<User | null> {
  */
 export async function findUserById(id: string): Promise<User | null> {
   await ensureInitialized();
-  return users.get(id) || null;
+  const result = await query<UserRow>(
+    'SELECT * FROM users WHERE id = $1',
+    [id]
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
 /**
@@ -84,19 +144,13 @@ export async function createUser(
   passwordHash: string
 ): Promise<User> {
   await ensureInitialized();
-  const id = generateUserId();
-  const now = new Date().toISOString();
-  const user: User = {
-    id,
-    email,
-    username,
-    passwordHash,
-    role: 'user', // Default role
-    createdAt: now,
-    updatedAt: now,
-  };
-  users.set(id, user);
-  return user;
+  const result = await query<UserRow>(
+    `INSERT INTO users (username, email, password_hash, role)
+     VALUES ($1, $2, $3, 'user')
+     RETURNING *`,
+    [username, email, passwordHash]
+  );
+  return rowToUser(result.rows[0]);
 }
 
 /**
@@ -107,12 +161,11 @@ export async function updateUserRole(
   role: User['role']
 ): Promise<User | null> {
   await ensureInitialized();
-  const user = users.get(userId);
-  if (!user) return null;
-  user.role = role;
-  user.updatedAt = new Date().toISOString();
-  users.set(userId, user);
-  return user;
+  const result = await query<UserRow>(
+    `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [role, userId]
+  );
+  return result.rows.length > 0 ? rowToUser(result.rows[0]) : null;
 }
 
 /**
@@ -120,7 +173,8 @@ export async function updateUserRole(
  */
 export async function getAllUsers(): Promise<User[]> {
   await ensureInitialized();
-  return Array.from(users.values());
+  const result = await query<UserRow>('SELECT * FROM users ORDER BY created_at DESC');
+  return result.rows.map(rowToUser);
 }
 
 /**
@@ -128,7 +182,8 @@ export async function getAllUsers(): Promise<User[]> {
  */
 export async function deleteUser(userId: string): Promise<boolean> {
   await ensureInitialized();
-  return users.delete(userId);
+  const result = await query('DELETE FROM users WHERE id = $1', [userId]);
+  return (result.rowCount ?? 0) > 0;
 }
 
 // --- Upgrade record operations ---
@@ -142,27 +197,78 @@ export async function createUpgradeRecord(
   toRole: User['role'],
   amountVND: number
 ): Promise<UpgradeRecord> {
-  const id = generateUpgradeId();
-  const record: UpgradeRecord = {
-    id,
-    userId,
-    fromRole,
-    toRole,
-    amountVND,
-    status: 'completed', // Simulated payment - auto-complete
-    createdAt: new Date().toISOString(),
-  };
-  upgradeRecords.set(id, record);
-  return record;
+  const result = await query<UpgradeRow>(
+    `INSERT INTO upgrade_records (user_id, from_role, to_role, amount_vnd, status)
+     VALUES ($1, $2, $3, $4, 'completed')
+     RETURNING *`,
+    [userId, fromRole, toRole, amountVND]
+  );
+  return rowToUpgradeRecord(result.rows[0]);
 }
 
 /**
  * Get upgrade records for a user
  */
 export async function getUpgradeRecordsByUser(userId: string): Promise<UpgradeRecord[]> {
-  const records: UpgradeRecord[] = [];
-  for (const record of upgradeRecords.values()) {
-    if (record.userId === userId) records.push(record);
-  }
-  return records;
+  const result = await query<UpgradeRow>(
+    'SELECT * FROM upgrade_records WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows.map(rowToUpgradeRecord);
+}
+
+// --- User history operations ---
+
+/**
+ * Save a reading to user history
+ */
+export async function createUserHistory(
+  userId: string,
+  readingType: string,
+  readingData: Record<string, unknown>
+): Promise<UserHistory> {
+  await ensureInitialized();
+  const result = await query<HistoryRow>(
+    `INSERT INTO user_history (user_id, reading_type, reading_data)
+     VALUES ($1, $2, $3)
+     RETURNING *`,
+    [userId, readingType, JSON.stringify(readingData)]
+  );
+  return rowToHistory(result.rows[0]);
+}
+
+/**
+ * Get reading history for a user
+ */
+export async function getUserHistory(userId: string): Promise<UserHistory[]> {
+  await ensureInitialized();
+  const result = await query<HistoryRow>(
+    'SELECT * FROM user_history WHERE user_id = $1 ORDER BY created_at DESC',
+    [userId]
+  );
+  return result.rows.map(rowToHistory);
+}
+
+/**
+ * Delete a single history record
+ */
+export async function deleteUserHistory(historyId: string, userId: string): Promise<boolean> {
+  await ensureInitialized();
+  const result = await query(
+    'DELETE FROM user_history WHERE id = $1 AND user_id = $2',
+    [historyId, userId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Delete all history for a user
+ */
+export async function deleteAllUserHistory(userId: string): Promise<boolean> {
+  await ensureInitialized();
+  const result = await query(
+    'DELETE FROM user_history WHERE user_id = $1',
+    [userId]
+  );
+  return (result.rowCount ?? 0) > 0;
 }

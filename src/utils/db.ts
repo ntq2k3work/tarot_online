@@ -1,0 +1,110 @@
+/**
+ * PostgreSQL Database Connection
+ * Uses the `pg` library to manage a connection pool
+ */
+
+import { Pool, PoolClient } from 'pg';
+
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432', 10),
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
+  database: process.env.DB_NAME || 'tarot_online',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+/**
+ * Execute a SQL query using the connection pool
+ */
+export async function query<T = Record<string, unknown>>(
+  text: string,
+  params?: unknown[]
+): Promise<{ rows: T[]; rowCount: number | null }> {
+  const result = await pool.query(text, params);
+  return { rows: result.rows as T[], rowCount: result.rowCount };
+}
+
+/**
+ * Get a client from the pool for transactions
+ */
+export async function getClient(): Promise<PoolClient> {
+  return pool.connect();
+}
+
+/**
+ * Run database migrations to ensure tables exist
+ */
+export async function runMigrations(): Promise<void> {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Create users table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        username VARCHAR(255) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(20) NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'render', 'admin')),
+        token VARCHAR(255),
+        token_expires_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Create index on email for fast lookups
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+    `);
+
+    // Create index on token for fast auth lookups
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_token ON users (token);
+    `);
+
+    // Create user_history table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_history (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reading_type VARCHAR(100) NOT NULL,
+        reading_data JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Create index on user_id for fast history lookups
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_history_user_id ON user_history (user_id);
+    `);
+
+    // Create upgrade_records table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS upgrade_records (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        from_role VARCHAR(20) NOT NULL,
+        to_role VARCHAR(20) NOT NULL,
+        amount_vnd INTEGER NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await client.query('COMMIT');
+    console.log('Database migrations completed successfully.');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Database migration failed:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export default pool;
