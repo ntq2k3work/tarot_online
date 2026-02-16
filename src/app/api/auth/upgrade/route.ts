@@ -3,15 +3,34 @@
  * Upgrade user role from "user" to "render" by paying 50,000 VND
  * Simulates a payment flow: validates user, processes payment, updates role
  * Requires: authenticated user with "user" role
+ *
+ * GET /api/auth/upgrade
+ * Get upgrade info and history for the current user
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { updateUserRole, createUpgradeRecord, getUpgradeRecordsByUser } from '@/data/users';
 import { generateToken } from '@/utils/auth';
+import { UserPublic } from '@/types/auth';
 
 // Upgrade cost in VND
 const UPGRADE_COST_VND = 50000;
+
+/**
+ * Helper to convert user to public representation (DRY)
+ */
+function toUserPublic(user: { id: string; email: string; username: string; role: string; phone: string | null; createdAt: string; updatedAt: string }): UserPublic {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    role: user.role as UserPublic['role'],
+    phone: user.phone,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
@@ -70,17 +89,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       payment: paymentSimulation,
       upgradeRecord,
       token: newToken,
-      user: {
-        id: updatedUser.id,
-        email: updatedUser.email,
-        username: updatedUser.username,
-        role: updatedUser.role,
-        createdAt: updatedUser.createdAt,
-        updatedAt: updatedUser.updatedAt,
-      },
+      user: toUserPublic(updatedUser),
     });
   } catch (error) {
-    console.error('Upgrade error:', error);
+    console.error('Upgrade error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi khi nâng cấp. Vui lòng thử lại sau.' },
       { status: 500 }
@@ -105,7 +117,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       records,
     });
   } catch (error) {
-    console.error('Get upgrade history error:', error);
+    console.error('Get upgrade history error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi. Vui lòng thử lại sau.' },
       { status: 500 }

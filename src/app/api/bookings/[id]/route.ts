@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { getBookingById } from '@/data/bookings';
+import { isValidUUID } from '@/utils/validation';
 
 /**
  * GET - Get a single booking by ID
@@ -19,6 +20,15 @@ export async function GET(
     if (errorResponse) return errorResponse;
 
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID lịch hẹn không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const booking = await getBookingById(id);
 
     if (!booking) {
@@ -43,7 +53,7 @@ export async function GET(
 
     return NextResponse.json({ booking });
   } catch (error) {
-    console.error('Get booking detail error:', error);
+    console.error('Get booking detail error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi khi lấy chi tiết lịch hẹn. Vui lòng thử lại sau.' },
       { status: 500 }

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ user: context!.user });
   } catch (error) {
-    console.error('Get profile error:', error);
+    console.error('Get profile error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi. Vui lòng thử lại sau.' },
       { status: 500 }

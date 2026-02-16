@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { getBookingById, updateBookingStatus } from '@/data/bookings';
+import { isValidUUID } from '@/utils/validation';
 
 export async function PATCH(
   request: NextRequest,
@@ -16,6 +17,15 @@ export async function PATCH(
     if (errorResponse) return errorResponse;
 
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID lịch hẹn không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const booking = await getBookingById(id);
 
     if (!booking) {
@@ -50,7 +60,7 @@ export async function PATCH(
 
     return NextResponse.json({ booking: updated });
   } catch (error) {
-    console.error('Cancel booking error:', error);
+    console.error('Cancel booking error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi khi hủy lịch hẹn. Vui lòng thử lại sau.' },
       { status: 500 }

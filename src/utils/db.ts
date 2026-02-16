@@ -1,41 +1,69 @@
 /**
  * PostgreSQL Database Connection
  * Uses the `pg` library to manage a connection pool
+ * Includes connection error handling and migration support
  */
 
 import { Pool, PoolClient } from 'pg';
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432', 10),
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: process.env.DB_NAME || 'tarot_online',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+/**
+ * Create the connection pool with configuration from environment variables
+ * Pool is created lazily on first use to allow env validation to run first
+ */
+let _pool: Pool | null = null;
+
+function getPool(): Pool {
+  if (!_pool) {
+    _pool = new Pool({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      database: process.env.DB_NAME || 'tarot_online',
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+
+    // Log pool errors (don't crash the process)
+    _pool.on('error', (err) => {
+      console.error('Unexpected database pool error:', err.message);
+    });
+  }
+  return _pool;
+}
 
 /**
  * Execute a SQL query using the connection pool
+ * All queries use parameterized statements to prevent SQL injection
  */
 export async function query<T = Record<string, unknown>>(
   text: string,
   params?: unknown[]
 ): Promise<{ rows: T[]; rowCount: number | null }> {
-  const result = await pool.query(text, params);
-  return { rows: result.rows as T[], rowCount: result.rowCount };
+  const pool = getPool();
+  try {
+    const result = await pool.query(text, params);
+    return { rows: result.rows as T[], rowCount: result.rowCount };
+  } catch (error) {
+    // Log query errors without exposing SQL details in production
+    const errorMessage = error instanceof Error ? error.message : 'Unknown database error';
+    console.error('Database query error:', errorMessage);
+    throw error;
+  }
 }
 
 /**
  * Get a client from the pool for transactions
  */
 export async function getClient(): Promise<PoolClient> {
+  const pool = getPool();
   return pool.connect();
 }
 
 /**
  * Run database migrations to ensure tables exist
+ * Uses transactions to ensure atomicity
  */
 export async function runMigrations(): Promise<void> {
   const client = await getClient();
@@ -134,11 +162,11 @@ export async function runMigrations(): Promise<void> {
     console.log('Database migrations completed successfully.');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Database migration failed:', error);
+    console.error('Database migration failed:', error instanceof Error ? error.message : 'Unknown error');
     throw error;
   } finally {
     client.release();
   }
 }
 
-export default pool;
+export default getPool;

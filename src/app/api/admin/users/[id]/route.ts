@@ -9,9 +9,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest, authorizeRole } from '@/utils/auth-middleware';
 import { findUserById, updateUserRole, deleteUser } from '@/data/users';
 import { UserPublic, UserRole } from '@/types/auth';
+import { isValidUUID } from '@/utils/validation';
 
 // Valid roles for role update
 const VALID_ROLES: UserRole[] = ['user', 'render', 'admin'];
+
+/**
+ * Helper to convert User to UserPublic (DRY - avoids repetition)
+ */
+function toUserPublic(user: { id: string; email: string; username: string; role: UserRole; phone: string | null; createdAt: string; updatedAt: string }): UserPublic {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    role: user.role,
+    phone: user.phone,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
 
 /**
  * GET - Get a single user's details
@@ -28,6 +44,15 @@ export async function GET(
     if (authzError) return authzError;
 
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID người dùng không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const user = await findUserById(id);
     if (!user) {
       return NextResponse.json(
@@ -36,19 +61,9 @@ export async function GET(
       );
     }
 
-    const userPublic: UserPublic = {
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      role: user.role,
-      phone: user.phone,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    };
-
-    return NextResponse.json({ user: userPublic });
+    return NextResponse.json({ user: toUserPublic(user) });
   } catch (error) {
-    console.error('Admin get user error:', error);
+    console.error('Admin get user error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi. Vui lòng thử lại sau.' },
       { status: 500 }
@@ -71,6 +86,15 @@ export async function PATCH(
     if (authzError) return authzError;
 
     const { id } = await params;
+
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID người dùng không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     const { role } = body as { role: UserRole };
 
@@ -98,22 +122,12 @@ export async function PATCH(
       );
     }
 
-    const userPublic: UserPublic = {
-      id: updatedUser.id,
-      email: updatedUser.email,
-      username: updatedUser.username,
-      role: updatedUser.role,
-      phone: updatedUser.phone,
-      createdAt: updatedUser.createdAt,
-      updatedAt: updatedUser.updatedAt,
-    };
-
     return NextResponse.json({
       message: `Đã cập nhật vai trò thành "${role}".`,
-      user: userPublic,
+      user: toUserPublic(updatedUser),
     });
   } catch (error) {
-    console.error('Admin update user role error:', error);
+    console.error('Admin update user role error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi. Vui lòng thử lại sau.' },
       { status: 500 }
@@ -137,6 +151,14 @@ export async function DELETE(
 
     const { id } = await params;
 
+    // Validate UUID format
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID người dùng không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     // Prevent admin from deleting themselves
     if (id === context!.user.id) {
       return NextResponse.json(
@@ -155,7 +177,7 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Đã xóa người dùng thành công.' });
   } catch (error) {
-    console.error('Admin delete user error:', error);
+    console.error('Admin delete user error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi. Vui lòng thử lại sau.' },
       { status: 500 }

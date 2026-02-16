@@ -7,16 +7,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { comparePassword, generateToken } from '@/utils/auth';
 import { findUserByEmail } from '@/data/users';
 import { LoginRequest, AuthResponse, UserPublic } from '@/types/auth';
+import { sanitizeString, isValidEmail } from '@/utils/validation';
+import { checkRateLimit, getClientIP, RATE_LIMIT_AUTH } from '@/utils/rate-limit';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await request.json();
-    const { email, password } = body as LoginRequest;
+    // Rate limiting for auth endpoints (prevent brute force)
+    const clientIP = getClientIP(request);
+    const rateLimitResult = checkRateLimit(`login:${clientIP}`, RATE_LIMIT_AUTH);
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json(
+        { error: 'Quá nhiều yêu cầu đăng nhập. Vui lòng thử lại sau.' },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimitResult.resetAt - Date.now()) / 1000)),
+          },
+        }
+      );
+    }
 
-    // Validate required fields
+    const body = await request.json();
+    const { email: rawEmail, password } = body as LoginRequest;
+
+    // Sanitize and validate inputs
+    const email = sanitizeString(rawEmail).toLowerCase();
+
     if (!email || !password) {
       return NextResponse.json(
         { error: 'Vui lòng cung cấp email và mật khẩu.' },
+        { status: 400 }
+      );
+    }
+
+    if (!isValidEmail(email)) {
+      return NextResponse.json(
+        { error: 'Email không hợp lệ.' },
         { status: 400 }
       );
     }
@@ -56,7 +82,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const response: AuthResponse = { token, user: userPublic };
     return NextResponse.json(response);
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Login error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại sau.' },
       { status: 500 }
