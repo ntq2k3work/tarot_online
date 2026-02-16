@@ -96,6 +96,40 @@ export async function runMigrations(): Promise<void> {
       );
     `);
 
+    // Add phone column to users table (idempotent)
+    await client.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20);
+    `);
+
+    // Create bookings table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bookings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reader_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        scheduled_at TIMESTAMPTZ NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+          CHECK (status IN ('PENDING', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED')),
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Indexes for bookings
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON bookings (user_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_reader_id ON bookings (reader_id);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status);
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_scheduled_at ON bookings (scheduled_at);
+    `);
+
     await client.query('COMMIT');
     console.log('Database migrations completed successfully.');
   } catch (error) {
