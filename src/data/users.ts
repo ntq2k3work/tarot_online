@@ -88,25 +88,37 @@ function rowToHistory(row: HistoryRow): UserHistory {
 /**
  * Ensure database is initialized with migrations and default admin user
  */
-let initialized = false;
+let initPromise: Promise<void> | null = null;
 async function ensureInitialized(): Promise<void> {
-  if (initialized) return;
-  initialized = true;
+  if (!initPromise) {
+    initPromise = doInitialize();
+  }
+  return initPromise;
+}
 
+async function doInitialize(): Promise<void> {
   await runMigrations();
 
   // Create default admin user if not exists
+  const adminEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@tarot-online.vn';
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    console.warn('DEFAULT_ADMIN_PASSWORD not set. Skipping default admin creation.');
+    return;
+  }
+
   const existing = await query<UserRow>(
     'SELECT id FROM users WHERE email = $1',
-    ['admin@tarot-online.vn']
+    [adminEmail]
   );
 
   if (existing.rows.length === 0) {
-    const adminPasswordHash = await hashPassword('admin123');
+    const adminPasswordHash = await hashPassword(adminPassword);
     await query(
       `INSERT INTO users (username, email, password_hash, role)
        VALUES ($1, $2, $3, $4)`,
-      ['admin', 'admin@tarot-online.vn', adminPasswordHash, 'admin']
+      ['admin', adminEmail, adminPasswordHash, 'admin']
     );
   }
 }

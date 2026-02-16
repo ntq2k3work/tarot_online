@@ -140,6 +140,17 @@ export async function getBookingsByReaderId(
 }
 
 /**
+ * List all bookings (for admin)
+ */
+export async function getAllBookings(): Promise<BookingWithDetails[]> {
+  const result = await query<BookingDetailRow>(
+    `SELECT ${BOOKING_DETAIL_SELECT} FROM ${BOOKING_DETAIL_FROM}
+     ORDER BY b.created_at DESC`
+  );
+  return result.rows.map(rowToBookingWithDetails);
+}
+
+/**
  * Update booking status
  */
 export async function updateBookingStatus(

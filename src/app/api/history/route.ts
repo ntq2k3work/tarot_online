@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { getUserHistory, createUserHistory, deleteAllUserHistory } from '@/data/users';
+import { safeParseJSON } from '@/utils/validation';
 
 /**
  * GET - Get all reading history for the current user
@@ -36,15 +37,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { context, errorResponse } = await authenticateRequest(request);
     if (errorResponse) return errorResponse;
 
-    const body = await request.json();
+    const body = await safeParseJSON(request);
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Request body không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const { readingType, readingData } = body as {
       readingType: string;
       readingData: Record<string, unknown>;
     };
 
-    if (!readingType || !readingData) {
+    if (!readingType || typeof readingType !== 'string') {
       return NextResponse.json(
-        { error: 'Vui lòng cung cấp loại đọc bài và dữ liệu.' },
+        { error: 'Vui lòng cung cấp loại đọc bài (readingType).' },
+        { status: 400 }
+      );
+    }
+
+    if (!readingData || typeof readingData !== 'object' || Array.isArray(readingData)) {
+      return NextResponse.json(
+        { error: 'Vui lòng cung cấp dữ liệu đọc bài hợp lệ (readingData).' },
         { status: 400 }
       );
     }

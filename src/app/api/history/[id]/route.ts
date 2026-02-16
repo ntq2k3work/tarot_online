@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { deleteUserHistory } from '@/data/users';
+import { isValidUUID } from '@/utils/validation';
 
 /**
  * DELETE - Delete a specific history record
@@ -19,6 +20,14 @@ export async function DELETE(
     if (errorResponse) return errorResponse;
 
     const { id } = await params;
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID lịch sử không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const deleted = await deleteUserHistory(id, context!.user.id);
 
     if (!deleted) {

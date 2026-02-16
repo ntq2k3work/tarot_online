@@ -6,10 +6,13 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
-import { createBooking, getBookingsByUserId, getBookingsByReaderId } from '@/data/bookings';
+import { createBooking, getBookingsByUserId, getBookingsByReaderId, getAllBookings } from '@/data/bookings';
 import { findUserById } from '@/data/users';
 import { CreateBookingRequest } from '@/types/booking';
 import { notifyReaderNewBooking } from '@/utils/notification';
+import { isValidUUID, safeParseJSON, sanitizeString } from '@/utils/validation';
+
+const MAX_NOTES_LENGTH = 1000;
 
 /**
  * POST - Create a new booking request
@@ -19,13 +22,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const { context, errorResponse } = await authenticateRequest(request);
     if (errorResponse) return errorResponse;
 
-    const body = (await request.json()) as CreateBookingRequest;
-    const { readerId, scheduledAt, notes } = body;
+    const body = await safeParseJSON(request);
+    if (!body) {
+      return NextResponse.json(
+        { error: 'Request body không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
+    const { readerId, scheduledAt, notes } = body as CreateBookingRequest;
 
     // Validate required fields
     if (!readerId || !scheduledAt) {
       return NextResponse.json(
         { error: 'Vui lòng cung cấp readerId và scheduledAt.' },
+        { status: 400 }
+      );
+    }
+
+    // Validate readerId is a valid UUID
+    if (typeof readerId !== 'string' || !isValidUUID(readerId)) {
+      return NextResponse.json(
+        { error: 'readerId không hợp lệ.' },
         { status: 400 }
       );
     }
@@ -44,6 +62,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 400 }
       );
     }
+
+    // Sanitize notes
+    const sanitizedNotes = notes && typeof notes === 'string'
+      ? sanitizeString(notes, MAX_NOTES_LENGTH)
+      : undefined;
 
     // Verify reader exists and has 'render' role
     const reader = await findUserById(readerId);
@@ -67,8 +90,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       context!.user.id,
       readerId,
       scheduledAt,
-      notes
+      sanitizedNotes
     );
+
+    if (!booking) {
+      return NextResponse.json(
+        { error: 'Không thể tạo lịch hẹn. Vui lòng thử lại.' },
+        { status: 500 }
+      );
+    }
 
     // Send notification to reader (fire-and-forget)
     notifyReaderNewBooking(reader.email, reader.phone, {
@@ -76,7 +106,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       userName: context!.user.username,
       readerName: reader.username,
       scheduledAt,
-      notes,
+      notes: sanitizedNotes,
     }).catch((err) => console.error('Notification error:', err));
 
     return NextResponse.json({ booking }, { status: 201 });
@@ -93,7 +123,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
  * GET - List bookings for the authenticated user
  * Readers see bookings where they are the reader
  * Users see bookings where they are the customer
- * Admins see all (via reader + user queries combined)
+ * Admins see all bookings
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -103,19 +133,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const user = context!.user;
     let bookings;
 
-    if (user.role === 'render') {
+    if (user.role === 'admin') {
+      // Admins see all bookings
+      bookings = await getAllBookings();
+    } else if (user.role === 'render') {
       // Readers see their incoming bookings
       bookings = await getBookingsByReaderId(user.id);
-    } else if (user.role === 'admin') {
-      // Admins see both sides
-      const asUser = await getBookingsByUserId(user.id);
-      const asReader = await getBookingsByReaderId(user.id);
-      const ids = new Set<string>();
-      bookings = [...asUser, ...asReader].filter((b) => {
-        if (ids.has(b.id)) return false;
-        ids.add(b.id);
-        return true;
-      });
     } else {
       // Regular users see their own bookings
       bookings = await getBookingsByUserId(user.id);

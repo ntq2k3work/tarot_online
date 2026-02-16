@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/utils/auth-middleware';
 import { getBookingById, updateBookingStatus } from '@/data/bookings';
+import { isValidUUID } from '@/utils/validation';
 
 export async function PATCH(
   request: NextRequest,
@@ -16,6 +17,14 @@ export async function PATCH(
     if (errorResponse) return errorResponse;
 
     const { id } = await params;
+
+    if (!isValidUUID(id)) {
+      return NextResponse.json(
+        { error: 'ID lịch hẹn không hợp lệ.' },
+        { status: 400 }
+      );
+    }
+
     const booking = await getBookingById(id);
 
     if (!booking) {
