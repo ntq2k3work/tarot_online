@@ -424,7 +424,12 @@ const createMinorArcana = (): TarotCard[] => {
         cardName = `${courtCards[courtIndex].name} of ${suit.name.charAt(0).toUpperCase() + suit.name.slice(1)}`;
         cardNameVi = `${courtCards[courtIndex].nameVi} ${suit.nameVi}`;
       } else {
-        cardName = num === 1 ? `Ace of ${suit.name.charAt(0).toUpperCase() + suit.name.slice(1)}` : `${num} of ${suit.name.charAt(0).toUpperCase() + suit.name.slice(1)}`;
+        const numberWords: Record<number, string> = {
+          1: 'Ace', 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five',
+          6: 'Six', 7: 'Seven', 8: 'Eight', 9: 'Nine', 10: 'Ten'
+        };
+        const suitCapitalized = suit.name.charAt(0).toUpperCase() + suit.name.slice(1);
+        cardName = `${numberWords[num]} of ${suitCapitalized}`;
         cardNameVi = num === 1 ? `Át ${suit.nameVi}` : `${num} ${suit.nameVi}`;
       }
 
