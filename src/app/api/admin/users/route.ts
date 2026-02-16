@@ -26,6 +26,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       email: u.email,
       username: u.username,
       role: u.role,
+      phone: u.phone,
       createdAt: u.createdAt,
       updatedAt: u.updatedAt,
     }));

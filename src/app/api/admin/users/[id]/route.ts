@@ -41,6 +41,7 @@ export async function GET(
       email: user.email,
       username: user.username,
       role: user.role,
+      phone: user.phone,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -102,6 +103,7 @@ export async function PATCH(
       email: updatedUser.email,
       username: updatedUser.username,
       role: updatedUser.role,
+      phone: updatedUser.phone,
       createdAt: updatedUser.createdAt,
       updatedAt: updatedUser.updatedAt,
     };

@@ -12,6 +12,7 @@ export interface User {
   username: string;
   passwordHash: string;
   role: UserRole;
+  phone: string | null;
   token: string | null;
   tokenExpiresAt: string | null;
   createdAt: string;
@@ -24,6 +25,7 @@ export interface UserPublic {
   email: string;
   username: string;
   role: UserRole;
+  phone: string | null;
   createdAt: string;
   updatedAt: string;
 }
