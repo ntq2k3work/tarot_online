@@ -61,6 +61,7 @@ export async function authenticateRequest(
     email: user.email,
     username: user.username,
     role: user.role,
+    phone: user.phone,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

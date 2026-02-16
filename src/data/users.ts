@@ -14,6 +14,7 @@ interface UserRow {
   email: string;
   password_hash: string;
   role: 'user' | 'render' | 'admin';
+  phone: string | null;
   token: string | null;
   token_expires_at: string | null;
   created_at: string;
@@ -48,6 +49,7 @@ function rowToUser(row: UserRow): User {
     email: row.email,
     passwordHash: row.password_hash,
     role: row.role,
+    phone: row.phone,
     token: row.token,
     tokenExpiresAt: row.token_expires_at,
     createdAt: row.created_at,
