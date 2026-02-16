@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /*_next*
+
+Sitemap: https://tarot-online.vercel.app/sitemap.xml

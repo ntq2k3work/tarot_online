@@ -112,12 +112,22 @@ export default function CardsPage() {
             <button
               key={card.id}
               onClick={() => setSelectedCard(card)}
-              className="glass-card p-4 text-center hover:border-gold/50 transition-all duration-300 group cursor-pointer"
+              className="glass-card p-3 text-center hover:border-gold/50 transition-all duration-300 group cursor-pointer"
             >
-              <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">
-                {card.symbol}
+              <div className="aspect-[2/3] relative mb-2 overflow-hidden rounded-lg">
+                {card.image ? (
+                  <img 
+                    src={card.image} 
+                    alt={card.nameVi}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
+                    {card.symbol}
+                  </div>
+                )}
               </div>
-              <h3 className="font-display text-sm text-gold group-hover:text-gold-light transition-colors">
+              <h3 className="font-display text-sm text-gold group-hover:text-gold-light transition-colors line-clamp-1">
                 {card.nameVi}
               </h3>
               <p className="text-xs text-foreground/50 mt-1">
@@ -133,9 +143,18 @@ export default function CardsPage() {
               className="glass-card p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
+              {selectedCard.image && (
+                <div className="mb-6 flex justify-center">
+                  <img 
+                    src={selectedCard.image} 
+                    alt={selectedCard.nameVi}
+                    className="max-w-xs rounded-lg shadow-lg"
+                  />
+                </div>
+              )}
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-4">
-                  <span className="text-5xl">{selectedCard.symbol}</span>
+                  {!selectedCard.image && <span className="text-5xl">{selectedCard.symbol}</span>}
                   <div>
                     <h2 className="font-display text-2xl text-gold">{selectedCard.nameVi}</h2>
                     <p className="text-foreground/60">{selectedCard.name}</p>

@@ -24,8 +24,8 @@ export default function TarotCard({
 
   const sizeClasses = {
     sm: 'w-24 h-36',
-    md: 'w-32 h-48',
-    lg: 'w-40 h-60'
+    md: 'w-32 h-48', 
+    lg: 'w-48 h-72'
   };
 
   const fontSizeClasses = {
@@ -66,16 +66,29 @@ export default function TarotCard({
         </div>
 
         <div className={`tarot-card-back flex flex-col items-center justify-center p-3 ${isHovered && !isFlipped ? 'animate-pulse-glow' : ''}`}>
-          <span className={`text-3xl mb-2 ${isReversed ? 'rotate-180' : ''}`}>
-            {card.symbol}
-          </span>
-          <span className={`font-display text-primary-light text-center ${fontSizeClasses[size]} leading-tight`}>
-            {card.nameVi}
-          </span>
-          {isReversed && (
-            <span className="text-accent text-xs mt-1">(Đảo ngược)</span>
+          {card.image ? (
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img 
+                src={card.image} 
+                alt={card.nameVi}
+                className={`max-w-full max-h-full object-contain ${isReversed ? 'rotate-180' : ''}`}
+                style={{ borderRadius: '8px' }}
+              />
+            </div>
+          ) : (
+            <>
+              <span className={`text-3xl mb-2 ${isReversed ? 'rotate-180' : ''}`}>
+                {card.symbol}
+              </span>
+              <span className={`font-display text-primary-light text-center ${fontSizeClasses[size]} leading-tight`}>
+                {card.nameVi}
+              </span>
+              {isReversed && (
+                <span className="text-accent text-xs mt-1">(Đảo ngược)</span>
+              )}
+            </>
           )}
-          {showDetails && (
+          {showDetails && !card.image && (
             <div className="mt-2 text-center">
               <span className="text-xs text-foreground/60">
                 {card.keywords.slice(0, 2).join(' • ')}

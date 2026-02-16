@@ -10,6 +10,45 @@ export interface TarotCard {
   reversed: string;
   description: string;
   symbol: string;
+  image?: string;
+}
+
+const TAROT_IMAGE_BASE = 'https://raw.githubusercontent.com/krates98/tarotcardapi/main/images';
+
+function getCardImageUrl(name: string, suit?: string, number?: number): string {
+  const formattedName = name.toLowerCase().replace(/\s+/g, '');
+  let filename: string;
+
+  if (suit && number) {
+    const suitMap: Record<string, string> = {
+      wands: 'wands',
+      cups: 'cups',
+      swords: 'swords',
+      pentacles: 'pentacles'
+    };
+    const numberNames: Record<number, string> = {
+      1: 'ace',
+      2: 'two',
+      3: 'three',
+      4: 'four',
+      5: 'five',
+      6: 'six',
+      7: 'seven',
+      8: 'eight',
+      9: 'nine',
+      10: 'ten',
+      11: 'page',
+      12: 'knight',
+      13: 'queen',
+      14: 'king'
+    };
+    const numStr = numberNames[number] || number;
+    filename = `${numStr}of${suitMap[suit]}.jpeg`;
+  } else {
+    filename = `${formattedName}.jpeg`;
+  }
+
+  return `${TAROT_IMAGE_BASE}/${filename}`;
 }
 
 export const majorArcana: TarotCard[] = [
@@ -400,7 +439,8 @@ const createMinorArcana = (): TarotCard[] => {
         upright: meanings.upright,
         reversed: meanings.reversed,
         description: `Lá bài ${cardNameVi} thuộc chất ${suit.nameVi} (${suit.element}), đại diện cho ${suit.keywords.join(', ')}.`,
-        symbol: suit.name === 'wands' ? '🔥' : suit.name === 'cups' ? '💧' : suit.name === 'swords' ? '⚔️' : '💰'
+        symbol: suit.name === 'wands' ? '🔥' : suit.name === 'cups' ? '💧' : suit.name === 'swords' ? '⚔️' : '💰',
+        image: getCardImageUrl(cardName, suit.name, num)
       });
     }
   }
@@ -411,6 +451,38 @@ const createMinorArcana = (): TarotCard[] => {
 export const minorArcana = createMinorArcana();
 
 export const allTarotCards: TarotCard[] = [...majorArcana, ...minorArcana];
+
+const majorArcanaImageMap: Record<string, string> = {
+  'The Fool': 'thefool.jpeg',
+  'The Magician': 'themagician.jpeg',
+  'The High Priestess': 'thehighpriestess.jpeg',
+  'The Empress': 'theempress.jpeg',
+  'The Emperor': 'theemperor.jpeg',
+  'The Hierophant': 'thehierophant.jpeg',
+  'The Lovers': 'TheLovers.jpg',
+  'The Chariot': 'thechariot.jpeg',
+  'Strength': 'thestrength.jpeg',
+  'The Hermit': 'thehermit.jpeg',
+  'Wheel of Fortune': 'wheeloffortune.jpeg',
+  'Justice': 'justice.jpeg',
+  'The Hanged Man': 'thehangedman.jpeg',
+  'Death': 'death.jpeg',
+  'Temperance': 'temperance.jpeg',
+  'The Devil': 'thedevil.jpeg',
+  'The Tower': 'thetower.jpeg',
+  'The Star': 'thestar.jpeg',
+  'The Moon': 'themoon.jpeg',
+  'The Sun': 'thesun.jpeg',
+  'Judgement': 'judgement.jpeg',
+  'The World': 'theworld.jpeg',
+};
+
+majorArcana.forEach((card) => {
+  const imageFile = majorArcanaImageMap[card.name];
+  if (imageFile) {
+    card.image = `${TAROT_IMAGE_BASE}/${imageFile}`;
+  }
+});
 
 export const spreadTypes = [
   {
